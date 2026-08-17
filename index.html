@@ -174,6 +174,11 @@
     width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; font-family: inherit; font-size: 0.95rem;
   }
   form.intake .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  form.intake .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  form.intake .form-status { margin: 14px 0 0; font-size: 0.95rem; font-weight: 600; min-height: 1.2em; }
+  form.intake .form-status.ok { color: #2f5d4f; }
+  form.intake .form-status.bad { color: #a3312a; }
+  form.intake button[disabled] { opacity: 0.6; cursor: progress; }
   form.intake button {
     margin-top: 24px; background: var(--accent); color: #fff; border: none; padding: 14px 28px;
     border-radius: 4px; font-weight: 600; font-size: 1rem; cursor: pointer;
@@ -346,16 +351,16 @@
     <p class="section-sub">Fastest way to reach us is to call or text <a href="tel:+16124052692"><strong>(612) 405-2692</strong></a>. Prefer to write it out? Fill in the form and we'll get back to you within 1&ndash;2 business days to schedule a free in-home walkthrough.</p>
 
     <!-- ============================ FORM SETUP ============================
-      RIGHT NOW this form does nothing when submitted — it needs a destination.
-      Two-minute fix, free, no code:
-        1. Go to formspree.io and sign up (free tier is plenty at your volume).
-        2. Create a form; it gives you an endpoint like https://formspree.io/f/abcdwxyz
-        3. Paste that URL into the action="" below, replacing YOUR_FORMSPREE_ENDPOINT.
-      Submissions then arrive in your email inbox automatically.
-      Until that's done, the phone number above is the working contact route —
-      which is fine, since most homeowners call anyway.
+      This form posts straight into the Carolina Painting app at
+      app.carolinapaintingmn.com/api/leads, so an enquiry lands in the Leads
+      list as a record — nobody retypes it out of an inbox. Formspree is not
+      used and is not needed.
+
+      Submission is handled by the script at the bottom of this file. If the
+      app cannot be reached for any reason, the visitor is shown the phone
+      number rather than an error, and the form keeps what they typed.
     ==================================================================== -->
-    <form class="intake" action="YOUR_FORMSPREE_ENDPOINT" method="POST">
+    <form class="intake" id="intake-form" method="POST" novalidate>
       <div class="row">
         <div>
           <label for="name">Full name</label>
@@ -401,7 +406,14 @@
       <input type="text" id="timeline" name="Timeline" placeholder="e.g. within a month, this summer, just exploring">
       <label for="details">Tell us about your project</label>
       <textarea id="details" name="Details" rows="4" placeholder="Rooms, colors you're considering, any concerns about the surfaces, etc."></textarea>
-      <button type="submit">Request My Free Estimate</button>
+      <!-- Honeypot. Hidden from people and from screen readers; bots fill in
+           every field they find. A filled one is silently filed as junk. -->
+      <div class="hp" aria-hidden="true">
+        <label for="website">Website</label>
+        <input type="text" id="website" name="Website" tabindex="-1" autocomplete="off">
+      </div>
+      <button type="submit" id="intake-submit">Request My Free Estimate</button>
+      <p class="form-status" id="intake-status" role="status"></p>
       <p class="form-note">We'll never share your information. You'll hear back from us within 1&ndash;2 business days.</p>
     </form>
   </div>
@@ -427,6 +439,85 @@
     &copy; 2026 Carolina Painting Company. All rights reserved. &mdash; <!-- Add "Licensed & insured" here ONLY once both are actually true. Do not add "LLC" until the LLC is filed and approved. -->
   </div>
 </footer>
+
+<script>
+// Contact form -> the Carolina Painting app's lead intake.
+//
+// A homeowner filling this in has given us their name, phone and address. The
+// two failure modes that actually matter are (a) dumping them on an error page
+// and (b) losing what they typed. Neither happens here: on any failure the form
+// keeps its contents and points them at the phone number, which always works.
+(function () {
+  var form = document.getElementById('intake-form');
+  if (!form) return;
+
+  var statusEl = document.getElementById('intake-status');
+  var button = document.getElementById('intake-submit');
+  var PHONE = '(612) 405-2692';
+
+  // Local dev serves this file from a static server while the app runs on 8791.
+  var API = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+    ? 'http://localhost:8791/api/leads'
+    : 'https://app.carolinapaintingmn.com/api/leads';
+
+  function say(message, kind) {
+    statusEl.textContent = message;
+    statusEl.className = 'form-status' + (kind ? ' ' + kind : '');
+  }
+
+  function value(name) {
+    var field = form.elements[name];
+    return field ? field.value.trim() : '';
+  }
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+
+    var payload = {
+      name: value('Name'),
+      phone: value('Phone'),
+      email: value('Email'),
+      address: value('Address'),
+      project_type: value('Project type'),
+      rough_size: value('Rough size'),
+      timeline: value('Timeline'),
+      details: value('Details'),
+      website: value('Website')
+    };
+
+    if (!payload.name || (!payload.phone && !payload.email)) {
+      say('Please add your name and either a phone number or an email.', 'bad');
+      return;
+    }
+
+    button.disabled = true;
+    say('Sending…');
+
+    fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        if (res.ok) {
+          form.reset();
+          say("Thank you — we've got your request and will be in touch within 1–2 business days.", 'ok');
+        } else if (res.status === 429) {
+          say('That came through already. If it is urgent, call or text ' + PHONE + '.', 'bad');
+        } else {
+          say('Something went wrong on our end. Please call or text ' + PHONE + '.', 'bad');
+        }
+      })
+      .catch(function () {
+        // Offline, DNS, blocked — the visitor does not care which.
+        say('We could not send that just now. Please call or text ' + PHONE + '.', 'bad');
+      })
+      .then(function () {
+        button.disabled = false;
+      });
+  });
+})();
+</script>
 
 </body>
 </html>
