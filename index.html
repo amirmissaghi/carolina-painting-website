@@ -203,7 +203,15 @@
     .about-grid { grid-template-columns: 1fr; gap: 28px; }
     nav ul { display: none; }
   }
-</style>
+
+    .work-card { display:block; text-decoration:none; color:inherit; background:#fff;
+                 border:1px solid var(--line); border-radius:8px; overflow:hidden; padding:0 0 12px; }
+    .work-card:hover { box-shadow:0 2px 12px rgba(0,0,0,.08); }
+    .work-card-title { display:block; font-family:'Georgia','Times New Roman',serif;
+                       font-size:17px; font-weight:700; padding:12px 14px 2px; }
+    .work-card-meta { display:block; padding:0 14px; font-size:14px; opacity:.7; }
+    .gallery-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+  </style>
 </head>
 <body>
 
@@ -295,22 +303,52 @@
 <section id="gallery" class="alt">
   <div class="wrap">
     <h2 class="section-title">Our Work</h2>
-    <p class="section-sub">Honest answer: our photo gallery is still being built.</p>
-    <div class="pricing-note">
-      <p style="margin:0 0 12px"><strong>We're a new business, and we'd rather say so than pad this page with stock photos.</strong></p>
-      <p style="margin:0">Huriel has years of painting behind him, and we're photographing every job from here on. When we come out for your estimate, ask &mdash; we'll gladly show you what we've most recently finished, and give you the address of anything nearby you'd like to look at yourself.</p>
+    <p class="section-sub">Recent projects around the Twin Cities &mdash; before and after, room by room.</p>
+
+    <!-- Cards are filled in from /work.json so publishing a job updates this
+         page by itself. The link below is plain HTML and always works, so
+         there is a real crawlable path to every project page regardless. -->
+    <div class="gallery-grid" id="work-cards" hidden></div>
+
+    <div class="pricing-note" id="work-fallback">
+      <p style="margin:0 0 12px"><strong>Huriel has years of painting behind him, and we photograph every job.</strong></p>
+      <p style="margin:0">When we come out for your estimate, ask &mdash; we&rsquo;ll gladly walk you through what we&rsquo;ve most recently finished.</p>
     </div>
-    <!-- TO ADD PHOTOS LATER: delete the block above and uncomment this grid,
-         then drop your images into this folder and update the filenames.
-    <div class="gallery-grid">
-      <img src="./work-1.jpg" alt="Interior repaint in Minneapolis, before and after" style="width:100%;border-radius:6px">
-      <img src="./work-2.jpg" alt="Exterior repaint in St. Paul" style="width:100%;border-radius:6px">
-      <img src="./work-3.jpg" alt="Kitchen cabinets repainted" style="width:100%;border-radius:6px">
-      <img src="./work-4.jpg" alt="Trim and doors repainted" style="width:100%;border-radius:6px">
-    </div>
-    -->
+
+    <p style="text-align:center;margin-top:22px">
+      <a class="btn" href="/work">See all of our work &rarr;</a>
+    </p>
   </div>
 </section>
+
+<script>
+// Progressive enhancement: the "See all of our work" link above is the real,
+// crawlable path. This only makes the section richer for people.
+(function () {
+  var grid = document.getElementById('work-cards');
+  var fallback = document.getElementById('work-fallback');
+  if (!grid) return;
+  fetch('/work.json', { headers: { accept: 'application/json' } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) {
+      var pages = (data && data.pages) || [];
+      if (!pages.length) return;
+      grid.innerHTML = pages.slice(0, 6).map(function (p) {
+        var img = p.image
+          ? '<img src="' + p.image + '" alt="' + (p.image_alt || '') +
+            '" loading="lazy" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px">'
+          : '';
+        var where = [p.neighborhood, p.year].filter(Boolean).join(' \u00b7 ');
+        return '<a href="/work/' + p.slug + '" class="work-card">' + img +
+               '<span class="work-card-title">' + p.title + '</span>' +
+               '<span class="work-card-meta">' + where + '</span></a>';
+      }).join('');
+      grid.hidden = false;
+      if (fallback) fallback.hidden = true;
+    })
+    .catch(function () { /* leave the honest fallback in place */ });
+})();
+</script>
 
 <section id="pricing">
   <div class="wrap">

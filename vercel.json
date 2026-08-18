@@ -36,6 +36,10 @@
       "destination": "https://app.carolinapaintingmn.com/work/:slug"
     },
     {
+      "source": "/work.json",
+      "destination": "https://app.carolinapaintingmn.com/work.json"
+    },
+    {
       "source": "/sitemap.xml",
       "destination": "https://app.carolinapaintingmn.com/sitemap.xml"
     }
